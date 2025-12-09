@@ -1,537 +1,19 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Sparkles, Music, VolumeX, RefreshCcw, ArrowRight, Moon, Star, Wand2, X, Info } from 'lucide-react';
-
-// --- 1. 音频引擎 (Web Audio API - 保持不变，效果很好) ---
-class AmbientSound {
-  constructor() {
-    this.ctx = null;
-    this.oscillators = [];
-    this.gainNode = null;
-    this.isPlaying = false;
-  }
-
-  init() {
-    if (this.ctx) return;
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AudioContext();
-    this.gainNode = this.ctx.createGain();
-    this.gainNode.connect(this.ctx.destination);
-    this.gainNode.gain.value = 0.1; 
-  }
-
-  play() {
-    if (!this.ctx) this.init();
-    if (this.isPlaying) return;
-    this.ctx.resume();
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>女巫的草药瓶 - 沉浸式制作</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 React 和 ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- 引入 Babel 用于解析 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    // 创建神秘的和弦 (A Minor 9)
-    const freqs = [110.00, 130.81, 164.81, 196.00, 246.94]; 
-    
-    freqs.forEach((f, i) => {
-      const osc = this.ctx.createOscillator();
-      osc.type = i % 2 === 0 ? 'sine' : 'triangle';
-      osc.frequency.value = f;
-      
-      const lfo = this.ctx.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.1 + Math.random() * 0.2;
-      const lfoGain = this.ctx.createGain();
-      lfoGain.gain.value = 2.0; 
-      
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-      
-      // 独立的音量包络，让声音忽隐忽现
-      const oscGain = this.ctx.createGain();
-      oscGain.gain.value = 0.05 / (i + 1);
-      
-      osc.connect(oscGain);
-      oscGain.connect(this.gainNode);
-      
-      osc.start();
-      lfo.start();
-      
-      this.oscillators.push({ osc, lfo, oscGain });
-    });
-    
-    this.isPlaying = true;
-  }
-
-  stop() {
-    if (!this.isPlaying) return;
-    this.oscillators.forEach(o => {
-      o.osc.stop();
-      o.lfo.stop();
-    });
-    this.oscillators = [];
-    this.isPlaying = false;
-  }
-}
-
-// --- 2. 视觉素材组件 (SVG Icons) ---
-
-// 通用草药图标组件
-const HerbIcon = ({ color, className }) => (
-  <svg viewBox="0 0 24 24" className={className} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22v-8" strokeOpacity="0.6"/>
-    <path d="M12 14c0-3.3-2-6-5-6-1 0-2 .5-2 1.5 0 2 2 4.5 4 6.5" fill={color} fillOpacity="0.2"/>
-    <path d="M12 14c0-3.3 2-6 5-6 1 0 2 .5 2 1.5 0 2-2 4.5-4 6.5" fill={color} fillOpacity="0.2"/>
-    <path d="M12 8c-1-2-2.5-3-4-3" strokeOpacity="0.4"/>
-  </svg>
-);
-
-// 通用水晶图标组件
-const CrystalIcon = ({ color, className }) => (
-  <svg viewBox="0 0 24 24" className={className} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 2l-5 9h10l-5-9z" fill={color} fillOpacity="0.3"/>
-    <path d="M7 11l-5 6 10 5 10-5-5-6H7z" fill={color} fillOpacity="0.1"/>
-    <path d="M12 22V11" strokeOpacity="0.5"/>
-    <path d="M7 11l5 11 5-11" strokeOpacity="0.5"/>
-  </svg>
-);
-
-// --- 3. 数据配置 ---
-
-const BOTTLE_SHAPES = [
-  {
-    id: 'round',
-    name: '月圆之瓶',
-    path: 'M50,20 L70,20 L75,50 C100,60 110,90 100,120 C90,150 30,150 20,120 C10,90 20,60 45,50 L50,20 Z',
-    desc: '适合储存圆满、守护类的能量'
-  },
-  {
-    id: 'square',
-    name: '古籍方瓶',
-    path: 'M40,20 L80,20 L80,40 L100,45 L100,150 L20,150 L20,45 L40,40 Z',
-    desc: '稳固、秩序与财富的象征'
-  },
-  {
-    id: 'potion',
-    name: '炼金烧瓶',
-    path: 'M55,20 L65,20 L65,50 L90,130 C95,145 85,155 60,155 C35,155 25,145 30,130 L55,50 L55,20 Z',
-    desc: '转化、变革与灵感的容器'
-  }
-];
-
-const INGREDIENTS = [
-  // Herbs
-  { id: 'lavender', name: '薰衣草', color: '#a78bfa', meaning: '安眠 · 平静', type: 'herb', desc: '紫色的安抚之力，抚平焦躁。' },
-  { id: 'rosemary', name: '迷迭香', color: '#65a30d', meaning: '记忆 · 专注', type: 'herb', desc: '古老的智慧草药，唤醒心智。' },
-  { id: 'rose', name: '干玫瑰', color: '#f43f5e', meaning: '真爱 · 热情', type: 'herb', desc: '带刺的美丽，守护心中的火。' },
-  { id: 'mugwort', name: '艾草', color: '#3f6212', meaning: '辟邪 · 净化', type: 'herb', desc: '东方的守护草，驱散一切不洁。' },
-  { id: 'chamomile', name: '洋甘菊', color: '#fcd34d', meaning: '治愈 · 幸运', type: 'herb', desc: '像小太阳一样温暖受伤的心。' },
-  { id: 'mint', name: '薄荷', color: '#34d399', meaning: '活力 · 清晰', type: 'herb', desc: '清凉的香气，带来新的开始。' },
-  // Crystals
-  { id: 'amethyst', name: '紫水晶', color: '#c084fc', meaning: '灵性 · 智慧', type: 'crystal', desc: '第三眼的宝石，连接高维意识。' },
-  { id: 'obsidian', name: '黑曜石', color: '#475569', meaning: '防御 · 结界', type: 'crystal', desc: '最深沉的黑，吸收所有负能量。' },
-  { id: 'rosequartz', name: '粉晶', color: '#f9a8d4', meaning: '魅力 · 人缘', type: 'crystal', desc: '温柔的磁场，吸引善意。' },
-  { id: 'moonstone', name: '月光石', color: '#e2e8f0', meaning: '直觉 · 温柔', type: 'crystal', desc: '泛着蓝光的宝石，月神的礼物。' },
-  { id: 'tigereye', name: '虎眼石', color: '#d97706', meaning: '勇气 · 事业', type: 'crystal', desc: '像老虎眼睛一样锐利，洞察先机。' },
-  { id: 'goldflake', name: '金箔', color: '#fbbf24', meaning: '财富 · 太阳', type: 'crystal', desc: '纯粹的丰盛能量。' },
-];
-
-const WAX_COLORS = [
-  { id: 'red', color: '#b91c1c', name: '深红 (力量)', shadow: '#7f1d1d' },
-  { id: 'gold', color: '#f59e0b', name: '金黄 (荣耀)', shadow: '#b45309' },
-  { id: 'purple', color: '#7e22ce', name: '暗紫 (神秘)', shadow: '#581c87' },
-  { id: 'black', color: '#1e293b', name: '墨黑 (封印)', shadow: '#0f172a' },
-  { id: 'white', color: '#f1f5f9', name: '纯白 (净化)', shadow: '#cbd5e1' },
-];
-
-// --- 4. 主要组件 ---
-
-export default function WitchJarV2() {
-  // Game State
-  const [step, setStep] = useState(0); // 0:Intro, 1:Bottle, 2:Ingredients, 3:Seal, 4:Result
-  const [bottle, setBottle] = useState(BOTTLE_SHAPES[0]);
-  const [selection, setSelection] = useState([]); // Max 5 items
-  const [wax, setWax] = useState(null);
-  const [isMuted, setIsMuted] = useState(true);
-  
-  // Audio Ref
-  const audioRef = useRef(new AmbientSound());
-
-  const toggleAudio = () => {
-    if (isMuted) {
-      audioRef.current.play();
-    } else {
-      audioRef.current.stop();
-    }
-    setIsMuted(!isMuted);
-  };
-
-  const handleAddIngredient = (item) => {
-    if (selection.length < 5) {
-      setSelection([...selection, { ...item, uniqueId: Date.now() }]);
-    }
-  };
-
-  const handleRemoveIngredient = (index) => {
-    const newSel = [...selection];
-    newSel.splice(index, 1);
-    setSelection(newSel);
-  };
-
-  const resetGame = () => {
-    setStep(1);
-    setSelection([]);
-    setWax(null);
-  };
-
-  // 动态生成主要寓意
-  const mainIntention = useMemo(() => {
-    if (selection.length === 0) return "";
-    const counts = {};
-    selection.forEach(s => counts[s.meaning.split(' · ')[1]] = (counts[s.meaning.split(' · ')[1]] || 0) + 1);
-    return Object.entries(counts).sort((a,b) => b[1] - a[1])[0][0];
-  }, [selection]);
-
-  // --- 子屏幕组件 ---
-
-  const IntroScreen = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-fade-in px-4">
-      <div className="relative group cursor-pointer" onClick={() => !isMuted || toggleAudio()}>
-        <div className="absolute inset-0 bg-purple-600 blur-3xl opacity-20 group-hover:opacity-40 transition-opacity rounded-full"></div>
-        <Moon className="w-24 h-24 text-purple-200 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)] animate-float" />
-        <Star className="absolute top-0 right-0 text-yellow-200 w-8 h-8 animate-pulse" />
-      </div>
-      
-      <div className="space-y-2">
-        <h1 className="text-5xl font-serif text-transparent bg-clip-text bg-gradient-to-r from-purple-200 via-pink-200 to-purple-200">
-          女巫的草药瓶
-        </h1>
-        <p className="text-purple-300/60 font-serif tracking-widest text-sm uppercase">Witch's Herbal Altar</p>
-      </div>
-
-      <div className="max-w-md bg-black/30 backdrop-blur-sm p-6 rounded-lg border border-purple-500/20 text-purple-100/80 leading-relaxed font-light">
-        <p>每一株草药都有灵性，每一颗水晶都藏着星光。</p>
-        <p className="mt-4">请挑选 <span className="text-yellow-200 font-bold">5种</span> 材料，封存你的愿望。</p>
-      </div>
-
-      <button 
-        onClick={() => { setStep(1); if(isMuted) toggleAudio(); }}
-        className="mt-8 px-10 py-3 bg-gradient-to-r from-purple-900 to-indigo-900 border border-purple-500/50 rounded-full text-purple-100 hover:scale-105 transition-transform flex items-center gap-2 shadow-[0_0_20px_rgba(88,28,135,0.4)]"
-      >
-        开启祭坛 <ArrowRight size={16} />
-      </button>
-    </div>
-  );
-
-  const BottleScreen = () => (
-    <div className="flex flex-col h-full items-center p-4 animate-fade-in">
-      <h2 className="text-2xl text-purple-200 font-serif mb-2">选择容器</h2>
-      <p className="text-purple-400/60 text-sm mb-8">形状决定了能量流动的轨迹</p>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-        {BOTTLE_SHAPES.map((b) => (
-          <button
-            key={b.id}
-            onClick={() => { setBottle(b); setStep(2); }}
-            className={`group relative p-6 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-4 ${
-              bottle.id === b.id 
-                ? 'bg-purple-900/40 border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.2)]' 
-                : 'bg-black/20 border-white/10 hover:bg-purple-900/20 hover:border-purple-500/50'
-            }`}
-          >
-            <svg width="100" height="120" viewBox="0 0 120 160" className="drop-shadow-lg transition-transform group-hover:-translate-y-2">
-              <path d={b.path} fill="none" stroke={bottle.id === b.id ? "#e9d5ff" : "#a855f7"} strokeWidth="2" strokeOpacity="0.8" />
-              <path d={b.path} fill="rgba(255,255,255,0.05)" />
-            </svg>
-            <div className="text-center">
-              <h3 className="text-lg font-bold text-purple-100">{b.name}</h3>
-              <p className="text-xs text-purple-300/70 mt-1">{b.desc}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const IngredientsScreen = () => (
-    <div className="flex flex-col md:flex-row h-full w-full max-w-6xl mx-auto overflow-hidden animate-fade-in">
-      
-      {/* LEFT: The Altar (Bottle View) */}
-      <div className="w-full md:w-1/3 flex flex-col items-center justify-center p-4 bg-gradient-to-b from-transparent to-black/40 relative">
-        <div className="absolute top-4 left-4 bg-black/40 px-3 py-1 rounded-full text-xs text-purple-300 border border-purple-500/20">
-          容量: {selection.length} / 5
-        </div>
-        
-        {/* Render Bottle with Ingredients inside */}
-        <div className="relative w-[280px] h-[360px] flex items-center justify-center">
-          <svg width="280" height="360" viewBox="0 0 120 160" className="absolute z-20 pointer-events-none filter drop-shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-            <path d={bottle.path} fill="url(#glassShine)" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
-            <defs>
-              <linearGradient id="glassShine" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.1)" />
-                <stop offset="40%" stopColor="rgba(255,255,255,0)" />
-                <stop offset="60%" stopColor="rgba(255,255,255,0)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.15)" />
-              </linearGradient>
-            </defs>
-          </svg>
-
-          {/* Masked Content Container */}
-          <div className="absolute inset-0 z-10">
-             <svg width="280" height="360" viewBox="0 0 120 160">
-               <defs>
-                 <mask id="bottleMask">
-                   <path d={bottle.path} fill="white" />
-                 </mask>
-               </defs>
-               <g mask="url(#bottleMask)">
-                 <rect width="100%" height="100%" fill="#1a1025" opacity="0.9" />
-                 
-                 {/* Stacked Ingredients */}
-                 {selection.map((item, index) => {
-                   // Calculate position to stack them from bottom up
-                   // Randomize X slightly for natural look
-                   const yPos = 130 - (index * 22); 
-                   const xOffset = (index % 2 === 0 ? 10 : -10);
-                   
-                   return (
-                     <g key={item.uniqueId} transform={`translate(${xOffset}, 0)`}>
-                        {/* Render Icon inside SVG */}
-                        <foreignObject x="20" y={yPos} width="80" height="24" className="overflow-visible">
-                          <div className="flex justify-center items-center w-full h-full animate-drop-in">
-                            {item.type === 'herb' 
-                              ? <HerbIcon color={item.color} className="w-8 h-8 drop-shadow-md transform rotate-12" />
-                              : <CrystalIcon color={item.color} className="w-8 h-8 drop-shadow-md transform -rotate-12" />
-                            }
-                            {/* Particle effects */}
-                            <div className="absolute w-2 h-2 rounded-full bg-white opacity-50 blur-[1px] animate-ping" style={{left: '40%', top: '50%'}}></div>
-                          </div>
-                        </foreignObject>
-                     </g>
-                   );
-                 })}
-               </g>
-             </svg>
-          </div>
-          
-          {/* Back Glow */}
-          <div className="absolute inset-0 bg-purple-600/10 blur-3xl -z-10 rounded-full"></div>
-        </div>
-
-        <div className="flex gap-4 mt-6">
-           <button onClick={() => setSelection([])} className="p-2 text-red-300/70 hover:text-red-300 hover:bg-red-900/20 rounded-full transition-colors" title="清空">
-             <RefreshCcw size={20} />
-           </button>
-           <button 
-             onClick={() => setStep(3)}
-             disabled={selection.length !== 5}
-             className={`px-8 py-2 rounded-full font-semibold transition-all shadow-lg ${
-               selection.length === 5 
-                 ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/50 cursor-pointer' 
-                 : 'bg-gray-800 text-gray-500 cursor-not-allowed'
-             }`}
-           >
-             {selection.length === 5 ? '准备封印' : '请选满5种'}
-           </button>
-        </div>
-      </div>
-
-      {/* RIGHT: The Shelf (Ingredients List) */}
-      <div className="w-full md:w-2/3 h-full overflow-y-auto p-6 bg-slate-900/50 backdrop-blur-md border-l border-white/5">
-        <h3 className="text-xl text-purple-200 font-serif mb-4 flex items-center gap-2">
-          <Sparkles size={18} className="text-yellow-400"/> 草药与晶石架
-        </h3>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {INGREDIENTS.map((item) => {
-            const isSelected = selection.length < 5;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleAddIngredient(item)}
-                disabled={selection.length >= 5}
-                className="group relative flex items-center gap-3 p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-purple-900/30 hover:border-purple-500/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
-              >
-                {/* Icon Box */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-black/40 shadow-inner group-hover:scale-110 transition-transform`}>
-                  {item.type === 'herb' 
-                    ? <HerbIcon color={item.color} className="w-6 h-6" />
-                    : <CrystalIcon color={item.color} className="w-6 h-6" />
-                  }
-                </div>
-                
-                {/* Text */}
-                <div className="flex-1 z-10">
-                  <div className="text-gray-200 font-medium text-sm flex justify-between">
-                    {item.name}
-                    <span className="text-[10px] text-purple-400 bg-purple-900/50 px-1.5 py-0.5 rounded">{item.meaning.split('·')[1]}</span>
-                  </div>
-                  <div className="text-xs text-gray-500 group-hover:text-gray-300 leading-tight mt-1">{item.desc}</div>
-                </div>
-
-                {/* Hover Effect Background */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-
-  const SealingScreen = () => (
-    <div className="flex flex-col items-center justify-center h-full animate-fade-in p-6">
-      <h2 className="text-2xl font-serif text-purple-200 mb-8">最后一步：蜡封仪式</h2>
-      
-      <div className="flex flex-wrap justify-center gap-6 mb-12">
-        {WAX_COLORS.map((w) => (
-          <button
-            key={w.id}
-            onClick={() => setWax(w)}
-            className={`group relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${wax?.id === w.id ? 'scale-110 ring-4 ring-offset-2 ring-offset-slate-900 ring-purple-400' : 'hover:scale-105'}`}
-            style={{ backgroundColor: w.color }}
-          >
-            {wax?.id === w.id && <div className="absolute inset-0 bg-white/20 rounded-full animate-pulse" />}
-            <span className="absolute -bottom-8 text-xs text-gray-400 w-24 text-center opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{w.name}</span>
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={() => { if(wax) setStep(4); }}
-        disabled={!wax}
-        className={`px-12 py-3 text-lg font-serif rounded shadow-lg transition-all ${
-           wax ? 'bg-amber-700 hover:bg-amber-600 text-amber-50 shadow-amber-900/50 scale-100' : 'bg-gray-800 text-gray-500 scale-95 opacity-50 cursor-not-allowed'
-        }`}
-      >
-        完成制作
-      </button>
-    </div>
-  );
-
-  const ResultScreen = () => (
-    <div className="flex flex-col items-center justify-center h-full animate-scale-in p-4 relative overflow-hidden">
-      {/* Background Rays */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-         <div className="w-[800px] h-[800px] bg-gradient-to-r from-purple-500/30 to-blue-500/30 rounded-full blur-3xl animate-pulse"></div>
-      </div>
-
-      <div className="z-10 text-center mb-6">
-        <div className="flex items-center justify-center gap-2 text-yellow-400 mb-2">
-           <Star className="fill-current w-5 h-5 animate-spin-slow" />
-           <span className="text-sm font-bold tracking-[0.2em] uppercase">Ceremony Complete</span>
-           <Star className="fill-current w-5 h-5 animate-spin-slow" />
-        </div>
-        <h2 className="text-4xl font-serif text-white mb-2 text-shadow-glow">
-          {mainIntention}之瓶
-        </h2>
-        <p className="text-purple-300 italic text-sm">"{new Date().toLocaleDateString()} · 于神秘工坊制作"</p>
-      </div>
-
-      {/* FINAL JAR DISPLAY */}
-      <div className="relative group transform hover:scale-105 transition-transform duration-700">
-        <svg width="240" height="320" viewBox="0 0 120 160" className="drop-shadow-2xl filter contrast-125">
-          <defs>
-             <mask id="finalMask">
-               <path d={bottle.path} fill="white" />
-             </mask>
-             <filter id="waxGlow">
-               <feGaussianBlur stdDeviation="2" result="blur"/>
-               <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-             </filter>
-          </defs>
-          
-          <g mask="url(#finalMask)">
-             <rect width="100%" height="100%" fill="#1a1025" />
-             {selection.map((item, index) => {
-                const yPos = 130 - (index * 22); 
-                const xOffset = (index % 2 === 0 ? 10 : -10);
-                return (
-                  <g key={item.uniqueId} transform={`translate(${xOffset}, 0)`}>
-                    <foreignObject x="20" y={yPos} width="80" height="24">
-                      <div className="flex justify-center items-center w-full h-full">
-                         {item.type === 'herb' 
-                           ? <HerbIcon color={item.color} className="w-8 h-8 opacity-90" />
-                           : <CrystalIcon color={item.color} className="w-8 h-8 opacity-90" />
-                         }
-                      </div>
-                    </foreignObject>
-                  </g>
-                );
-             })}
-          </g>
-
-          {/* Bottle Outline & Shine */}
-          <path d={bottle.path} fill="url(#glassShine)" stroke="rgba(255,255,255,0.5)" strokeWidth="2" />
-
-          {/* Wax Seal */}
-          <g transform="translate(0, -5)">
-             <path d="M40,25 Q60,45 80,25 L80,15 L40,15 Z" fill={wax?.shadow} />
-             <path d="M40,15 L80,15 L80,25 C80,35 70,30 60,45 C50,30 40,35 40,25 Z" fill={wax?.color} filter="url(#waxGlow)" />
-             <path d="M55,25 L65,25 L60,35 Z" fill="rgba(0,0,0,0.1)" /> {/* Seal stamp indentation */}
-          </g>
-        </svg>
-
-        {/* Floating Particles around final bottle */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full pointer-events-none">
-           {[...Array(6)].map((_,i) => (
-             <div key={i} className="absolute bg-white rounded-full w-1 h-1 animate-float" 
-                  style={{
-                    left: `${Math.random()*100}%`, 
-                    top: `${Math.random()*100}%`, 
-                    animationDelay: `${Math.random()*2}s`,
-                    opacity: 0.6
-                  }} 
-             />
-           ))}
-        </div>
-      </div>
-
-      {/* Materials List Card */}
-      <div className="mt-8 bg-black/40 backdrop-blur border border-purple-500/30 rounded-xl p-4 max-w-sm w-full">
-        <div className="flex justify-center gap-3 mb-3 border-b border-white/10 pb-3">
-          {selection.map(s => (
-             <div key={s.uniqueId} className="w-6 h-6 rounded-full flex items-center justify-center bg-white/5" title={s.name}>
-                <div className="w-3 h-3 rounded-full" style={{backgroundColor: s.color}}></div>
-             </div>
-          ))}
-        </div>
-        <div className="text-xs text-center text-purple-300/80 font-serif">
-           封印了 <span className="text-white">{wax?.name.split(' ')[0]}</span> 的能量
-        </div>
-      </div>
-
-      <button onClick={resetGame} className="mt-8 text-purple-400 hover:text-white flex items-center gap-2 transition-colors">
-        <Wand2 size={16} /> 再次尝试
-      </button>
-    </div>
-  );
-
-  // --- 主渲染 ---
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden relative selection:bg-purple-500/30">
-      
-      {/* 动态背景 */}
-      <div className="fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,#2e1065,transparent)] opacity-50"></div>
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjMDIwMjAyIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz4KPC9zdmc+')] opacity-20"></div>
-      </div>
-
-      {/* Top Bar */}
-      <div className="relative z-50 p-4 flex justify-between items-center max-w-6xl mx-auto w-full">
-        <div className="flex items-center gap-2 text-purple-300/50 hover:text-purple-300 transition-colors cursor-default">
-           <Moon size={18} />
-           <span className="text-xs font-serif tracking-widest hidden sm:inline">MYSTIC ALTAR v2.0</span>
-        </div>
-        <button onClick={toggleAudio} className="p-2 rounded-full hover:bg-white/10 text-purple-300 transition-all">
-          {isMuted ? <VolumeX size={20} /> : <Music size={20} className="animate-pulse text-purple-400" />}
-        </button>
-      </div>
-
-      {/* Main Content */}
-      <main className="relative z-10 w-full h-[calc(100vh-80px)]">
-        {step === 0 && <IntroScreen />}
-        {step === 1 && <BottleScreen />}
-        {step === 2 && <IngredientsScreen />}
-        {step === 3 && <SealingScreen />}
-        {step === 4 && <ResultScreen />}
-      </main>
-
-      <style>{`
+    <style>
+        /* 自定义动画样式 */
         @keyframes float {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-10px); }
@@ -558,9 +40,538 @@ export default function WitchJarV2() {
         .animate-scale-in { animation: scale-in 0.8s ease-out forwards; }
         .animate-drop-in { animation: drop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
         .animate-spin-slow { animation: spin-slow 10s linear infinite; }
-        
         .text-shadow-glow { text-shadow: 0 0 20px rgba(168,85,247,0.6); }
-      `}</style>
-    </div>
-  );
-}
+        
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans selection:bg-purple-500/30 overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- 图标组件 (替换 lucide-react 依赖) ---
+        const IconBase = ({ children, className, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+                {children}
+            </svg>
+        );
+
+        const Sparkles = (props) => <IconBase {...props}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 5h4"/><path d="M18.8 13.2 21 12"/></IconBase>;
+        const Music = (props) => <IconBase {...props}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></IconBase>;
+        const VolumeX = (props) => <IconBase {...props}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" x2="17" y1="9" y2="15"/><line x1="17" x2="23" y1="9" y2="15"/></IconBase>;
+        const RefreshCcw = (props) => <IconBase {...props}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></IconBase>;
+        const ArrowRight = (props) => <IconBase {...props}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></IconBase>;
+        const Moon = (props) => <IconBase {...props}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></IconBase>;
+        const Star = (props) => <IconBase {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></IconBase>;
+        const Wand2 = (props) => <IconBase {...props}><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/></IconBase>;
+
+        // --- 1. 音频引擎 ---
+        class AmbientSound {
+          constructor() {
+            this.ctx = null;
+            this.oscillators = [];
+            this.gainNode = null;
+            this.isPlaying = false;
+          }
+
+          init() {
+            if (this.ctx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+            this.gainNode = this.ctx.createGain();
+            this.gainNode.connect(this.ctx.destination);
+            this.gainNode.gain.value = 0.1; 
+          }
+
+          play() {
+            if (!this.ctx) this.init();
+            if (this.isPlaying) return;
+            this.ctx.resume();
+            
+            const freqs = [110.00, 130.81, 164.81, 196.00, 246.94]; 
+            
+            freqs.forEach((f, i) => {
+              const osc = this.ctx.createOscillator();
+              osc.type = i % 2 === 0 ? 'sine' : 'triangle';
+              osc.frequency.value = f;
+              
+              const lfo = this.ctx.createOscillator();
+              lfo.type = 'sine';
+              lfo.frequency.value = 0.1 + Math.random() * 0.2;
+              const lfoGain = this.ctx.createGain();
+              lfoGain.gain.value = 2.0; 
+              
+              lfo.connect(lfoGain);
+              lfoGain.connect(osc.frequency);
+              
+              const oscGain = this.ctx.createGain();
+              oscGain.gain.value = 0.05 / (i + 1);
+              
+              osc.connect(oscGain);
+              oscGain.connect(this.gainNode);
+              
+              osc.start();
+              lfo.start();
+              
+              this.oscillators.push({ osc, lfo, oscGain });
+            });
+            
+            this.isPlaying = true;
+          }
+
+          stop() {
+            if (!this.isPlaying) return;
+            this.oscillators.forEach(o => {
+              o.osc.stop();
+              o.lfo.stop();
+            });
+            this.oscillators = [];
+            this.isPlaying = false;
+          }
+        }
+
+        // --- 2. 视觉素材组件 ---
+
+        const HerbIcon = ({ color, className }) => (
+          <svg viewBox="0 0 24 24" className={className} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22v-8" strokeOpacity="0.6"/>
+            <path d="M12 14c0-3.3-2-6-5-6-1 0-2 .5-2 1.5 0 2 2 4.5 4 6.5" fill={color} fillOpacity="0.2"/>
+            <path d="M12 14c0-3.3 2-6 5-6 1 0 2 .5 2 1.5 0 2-2 4.5-4 6.5" fill={color} fillOpacity="0.2"/>
+            <path d="M12 8c-1-2-2.5-3-4-3" strokeOpacity="0.4"/>
+          </svg>
+        );
+
+        const CrystalIcon = ({ color, className }) => (
+          <svg viewBox="0 0 24 24" className={className} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2l-5 9h10l-5-9z" fill={color} fillOpacity="0.3"/>
+            <path d="M7 11l-5 6 10 5 10-5-5-6H7z" fill={color} fillOpacity="0.1"/>
+            <path d="M12 22V11" strokeOpacity="0.5"/>
+            <path d="M7 11l5 11 5-11" strokeOpacity="0.5"/>
+          </svg>
+        );
+
+        // --- 3. 数据配置 ---
+
+        const BOTTLE_SHAPES = [
+          {
+            id: 'round',
+            name: '月圆之瓶',
+            path: 'M50,20 L70,20 L75,50 C100,60 110,90 100,120 C90,150 30,150 20,120 C10,90 20,60 45,50 L50,20 Z',
+            desc: '适合储存圆满、守护类的能量'
+          },
+          {
+            id: 'square',
+            name: '古籍方瓶',
+            path: 'M40,20 L80,20 L80,40 L100,45 L100,150 L20,150 L20,45 L40,40 Z',
+            desc: '稳固、秩序与财富的象征'
+          },
+          {
+            id: 'potion',
+            name: '炼金烧瓶',
+            path: 'M55,20 L65,20 L65,50 L90,130 C95,145 85,155 60,155 C35,155 25,145 30,130 L55,50 L55,20 Z',
+            desc: '转化、变革与灵感的容器'
+          }
+        ];
+
+        const INGREDIENTS = [
+          { id: 'lavender', name: '薰衣草', color: '#a78bfa', meaning: '安眠 · 平静', type: 'herb', desc: '紫色的安抚之力，抚平焦躁。' },
+          { id: 'rosemary', name: '迷迭香', color: '#65a30d', meaning: '记忆 · 专注', type: 'herb', desc: '古老的智慧草药，唤醒心智。' },
+          { id: 'rose', name: '干玫瑰', color: '#f43f5e', meaning: '真爱 · 热情', type: 'herb', desc: '带刺的美丽，守护心中的火。' },
+          { id: 'mugwort', name: '艾草', color: '#3f6212', meaning: '辟邪 · 净化', type: 'herb', desc: '东方的守护草，驱散一切不洁。' },
+          { id: 'chamomile', name: '洋甘菊', color: '#fcd34d', meaning: '治愈 · 幸运', type: 'herb', desc: '像小太阳一样温暖受伤的心。' },
+          { id: 'mint', name: '薄荷', color: '#34d399', meaning: '活力 · 清晰', type: 'herb', desc: '清凉的香气，带来新的开始。' },
+          { id: 'amethyst', name: '紫水晶', color: '#c084fc', meaning: '灵性 · 智慧', type: 'crystal', desc: '第三眼的宝石，连接高维意识。' },
+          { id: 'obsidian', name: '黑曜石', color: '#475569', meaning: '防御 · 结界', type: 'crystal', desc: '最深沉的黑，吸收所有负能量。' },
+          { id: 'rosequartz', name: '粉晶', color: '#f9a8d4', meaning: '魅力 · 人缘', type: 'crystal', desc: '温柔的磁场，吸引善意。' },
+          { id: 'moonstone', name: '月光石', color: '#e2e8f0', meaning: '直觉 · 温柔', type: 'crystal', desc: '泛着蓝光的宝石，月神的礼物。' },
+          { id: 'tigereye', name: '虎眼石', color: '#d97706', meaning: '勇气 · 事业', type: 'crystal', desc: '像老虎眼睛一样锐利，洞察先机。' },
+          { id: 'goldflake', name: '金箔', color: '#fbbf24', meaning: '财富 · 太阳', type: 'crystal', desc: '纯粹的丰盛能量。' },
+        ];
+
+        const WAX_COLORS = [
+          { id: 'red', color: '#b91c1c', name: '深红 (力量)', shadow: '#7f1d1d' },
+          { id: 'gold', color: '#f59e0b', name: '金黄 (荣耀)', shadow: '#b45309' },
+          { id: 'purple', color: '#7e22ce', name: '暗紫 (神秘)', shadow: '#581c87' },
+          { id: 'black', color: '#1e293b', name: '墨黑 (封印)', shadow: '#0f172a' },
+          { id: 'white', color: '#f1f5f9', name: '纯白 (净化)', shadow: '#cbd5e1' },
+        ];
+
+        // --- 4. 主要组件 ---
+
+        function WitchJarV2() {
+          const [step, setStep] = useState(0); 
+          const [bottle, setBottle] = useState(BOTTLE_SHAPES[0]);
+          const [selection, setSelection] = useState([]); 
+          const [wax, setWax] = useState(null);
+          const [isMuted, setIsMuted] = useState(true);
+          
+          const audioRef = useRef(new AmbientSound());
+
+          const toggleAudio = () => {
+            if (isMuted) {
+              audioRef.current.play();
+            } else {
+              audioRef.current.stop();
+            }
+            setIsMuted(!isMuted);
+          };
+
+          const handleAddIngredient = (item) => {
+            if (selection.length < 5) {
+              setSelection([...selection, { ...item, uniqueId: Date.now() }]);
+            }
+          };
+
+          const resetGame = () => {
+            setStep(1);
+            setSelection([]);
+            setWax(null);
+          };
+
+          const mainIntention = useMemo(() => {
+            if (selection.length === 0) return "";
+            const counts = {};
+            selection.forEach(s => counts[s.meaning.split(' · ')[1]] = (counts[s.meaning.split(' · ')[1]] || 0) + 1);
+            const entries = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+            return entries.length > 0 ? entries[0][0] : "神秘";
+          }, [selection]);
+
+          // --- 子屏幕组件 ---
+
+          const IntroScreen = () => (
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-fade-in px-4">
+              <div className="relative group cursor-pointer" onClick={() => !isMuted || toggleAudio()}>
+                <div className="absolute inset-0 bg-purple-600 blur-3xl opacity-20 group-hover:opacity-40 transition-opacity rounded-full"></div>
+                <Moon className="w-24 h-24 text-purple-200 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)] animate-float" />
+                <Star className="absolute top-0 right-0 text-yellow-200 w-8 h-8 animate-pulse" />
+              </div>
+              
+              <div className="space-y-2">
+                <h1 className="text-5xl font-serif text-transparent bg-clip-text bg-gradient-to-r from-purple-200 via-pink-200 to-purple-200">
+                  女巫的草药瓶
+                </h1>
+                <p className="text-purple-300/60 font-serif tracking-widest text-sm uppercase">Witch's Herbal Altar</p>
+              </div>
+
+              <div className="max-w-md bg-black/30 backdrop-blur-sm p-6 rounded-lg border border-purple-500/20 text-purple-100/80 leading-relaxed font-light">
+                <p>每一株草药都有灵性，每一颗水晶都藏着星光。</p>
+                <p className="mt-4">请挑选 <span className="text-yellow-200 font-bold">5种</span> 材料，封存你的愿望。</p>
+              </div>
+
+              <button 
+                onClick={() => { setStep(1); if(isMuted) toggleAudio(); }}
+                className="mt-8 px-10 py-3 bg-gradient-to-r from-purple-900 to-indigo-900 border border-purple-500/50 rounded-full text-purple-100 hover:scale-105 transition-transform flex items-center gap-2 shadow-[0_0_20px_rgba(88,28,135,0.4)]"
+              >
+                开启祭坛 <ArrowRight size={16} />
+              </button>
+            </div>
+          );
+
+          const BottleScreen = () => (
+            <div className="flex flex-col h-full items-center p-4 animate-fade-in">
+              <h2 className="text-2xl text-purple-200 font-serif mb-2">选择容器</h2>
+              <p className="text-purple-400/60 text-sm mb-8">形状决定了能量流动的轨迹</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+                {BOTTLE_SHAPES.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => { setBottle(b); setStep(2); }}
+                    className={`group relative p-6 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-4 ${
+                      bottle.id === b.id 
+                        ? 'bg-purple-900/40 border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.2)]' 
+                        : 'bg-black/20 border-white/10 hover:bg-purple-900/20 hover:border-purple-500/50'
+                    }`}
+                  >
+                    <svg width="100" height="120" viewBox="0 0 120 160" className="drop-shadow-lg transition-transform group-hover:-translate-y-2">
+                      <path d={b.path} fill="none" stroke={bottle.id === b.id ? "#e9d5ff" : "#a855f7"} strokeWidth="2" strokeOpacity="0.8" />
+                      <path d={b.path} fill="rgba(255,255,255,0.05)" />
+                    </svg>
+                    <div className="text-center">
+                      <h3 className="text-lg font-bold text-purple-100">{b.name}</h3>
+                      <p className="text-xs text-purple-300/70 mt-1">{b.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+
+          const IngredientsScreen = () => (
+            <div className="flex flex-col md:flex-row h-full w-full max-w-6xl mx-auto overflow-hidden animate-fade-in">
+              <div className="w-full md:w-1/3 flex flex-col items-center justify-center p-4 bg-gradient-to-b from-transparent to-black/40 relative">
+                <div className="absolute top-4 left-4 bg-black/40 px-3 py-1 rounded-full text-xs text-purple-300 border border-purple-500/20">
+                  容量: {selection.length} / 5
+                </div>
+                
+                <div className="relative w-[280px] h-[360px] flex items-center justify-center">
+                  <svg width="280" height="360" viewBox="0 0 120 160" className="absolute z-20 pointer-events-none filter drop-shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                    <path d={bottle.path} fill="url(#glassShine)" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
+                    <defs>
+                      <linearGradient id="glassShine" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="rgba(255,255,255,0.1)" />
+                        <stop offset="40%" stopColor="rgba(255,255,255,0)" />
+                        <stop offset="60%" stopColor="rgba(255,255,255,0)" />
+                        <stop offset="100%" stopColor="rgba(255,255,255,0.15)" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+
+                  <div className="absolute inset-0 z-10">
+                     <svg width="280" height="360" viewBox="0 0 120 160">
+                       <defs>
+                         <mask id="bottleMask">
+                           <path d={bottle.path} fill="white" />
+                         </mask>
+                       </defs>
+                       <g mask="url(#bottleMask)">
+                         <rect width="100%" height="100%" fill="#1a1025" opacity="0.9" />
+                         {selection.map((item, index) => {
+                           const yPos = 130 - (index * 22); 
+                           const xOffset = (index % 2 === 0 ? 10 : -10);
+                           return (
+                             <g key={item.uniqueId} transform={`translate(${xOffset}, 0)`}>
+                                <foreignObject x="20" y={yPos} width="80" height="24" className="overflow-visible">
+                                  <div className="flex justify-center items-center w-full h-full animate-drop-in">
+                                    {item.type === 'herb' 
+                                      ? <HerbIcon color={item.color} className="w-8 h-8 drop-shadow-md transform rotate-12" />
+                                      : <CrystalIcon color={item.color} className="w-8 h-8 drop-shadow-md transform -rotate-12" />
+                                    }
+                                    <div className="absolute w-2 h-2 rounded-full bg-white opacity-50 blur-[1px] animate-ping" style={{left: '40%', top: '50%'}}></div>
+                                  </div>
+                                </foreignObject>
+                             </g>
+                           );
+                         })}
+                       </g>
+                     </svg>
+                  </div>
+                  <div className="absolute inset-0 bg-purple-600/10 blur-3xl -z-10 rounded-full"></div>
+                </div>
+
+                <div className="flex gap-4 mt-6">
+                   <button onClick={() => setSelection([])} className="p-2 text-red-300/70 hover:text-red-300 hover:bg-red-900/20 rounded-full transition-colors" title="清空">
+                     <RefreshCcw size={20} />
+                   </button>
+                   <button 
+                     onClick={() => setStep(3)}
+                     disabled={selection.length !== 5}
+                     className={`px-8 py-2 rounded-full font-semibold transition-all shadow-lg ${
+                       selection.length === 5 
+                         ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-900/50 cursor-pointer' 
+                         : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                     }`}
+                   >
+                     {selection.length === 5 ? '准备封印' : '请选满5种'}
+                   </button>
+                </div>
+              </div>
+
+              <div className="w-full md:w-2/3 h-full overflow-y-auto p-6 bg-slate-900/50 backdrop-blur-md border-l border-white/5">
+                <h3 className="text-xl text-purple-200 font-serif mb-4 flex items-center gap-2">
+                  <Sparkles size={18} className="text-yellow-400"/> 草药与晶石架
+                </h3>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {INGREDIENTS.map((item) => {
+                    const isSelected = selection.length < 5;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleAddIngredient(item)}
+                        disabled={selection.length >= 5}
+                        className="group relative flex items-center gap-3 p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-purple-900/30 hover:border-purple-500/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+                      >
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-black/40 shadow-inner group-hover:scale-110 transition-transform`}>
+                          {item.type === 'herb' 
+                            ? <HerbIcon color={item.color} className="w-6 h-6" />
+                            : <CrystalIcon color={item.color} className="w-6 h-6" />
+                          }
+                        </div>
+                        <div className="flex-1 z-10">
+                          <div className="text-gray-200 font-medium text-sm flex justify-between">
+                            {item.name}
+                            <span className="text-[10px] text-purple-400 bg-purple-900/50 px-1.5 py-0.5 rounded">{item.meaning.split('·')[1]}</span>
+                          </div>
+                          <div className="text-xs text-gray-500 group-hover:text-gray-300 leading-tight mt-1">{item.desc}</div>
+                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+
+          const SealingScreen = () => (
+            <div className="flex flex-col items-center justify-center h-full animate-fade-in p-6">
+              <h2 className="text-2xl font-serif text-purple-200 mb-8">最后一步：蜡封仪式</h2>
+              
+              <div className="flex flex-wrap justify-center gap-6 mb-12">
+                {WAX_COLORS.map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => setWax(w)}
+                    className={`group relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${wax?.id === w.id ? 'scale-110 ring-4 ring-offset-2 ring-offset-slate-900 ring-purple-400' : 'hover:scale-105'}`}
+                    style={{ backgroundColor: w.color }}
+                  >
+                    {wax?.id === w.id && <div className="absolute inset-0 bg-white/20 rounded-full animate-pulse" />}
+                    <span className="absolute -bottom-8 text-xs text-gray-400 w-24 text-center opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{w.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => { if(wax) setStep(4); }}
+                disabled={!wax}
+                className={`px-12 py-3 text-lg font-serif rounded shadow-lg transition-all ${
+                   wax ? 'bg-amber-700 hover:bg-amber-600 text-amber-50 shadow-amber-900/50 scale-100' : 'bg-gray-800 text-gray-500 scale-95 opacity-50 cursor-not-allowed'
+                }`}
+              >
+                完成制作
+              </button>
+            </div>
+          );
+
+          const ResultScreen = () => (
+            <div className="flex flex-col items-center justify-center h-full animate-scale-in p-4 relative overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                 <div className="w-[800px] h-[800px] bg-gradient-to-r from-purple-500/30 to-blue-500/30 rounded-full blur-3xl animate-pulse"></div>
+              </div>
+
+              <div className="z-10 text-center mb-6">
+                <div className="flex items-center justify-center gap-2 text-yellow-400 mb-2">
+                   <Star className="fill-current w-5 h-5 animate-spin-slow" />
+                   <span className="text-sm font-bold tracking-[0.2em] uppercase">Ceremony Complete</span>
+                   <Star className="fill-current w-5 h-5 animate-spin-slow" />
+                </div>
+                <h2 className="text-4xl font-serif text-white mb-2 text-shadow-glow">
+                  {mainIntention}之瓶
+                </h2>
+                <p className="text-purple-300 italic text-sm">"{new Date().toLocaleDateString()} · 于神秘工坊制作"</p>
+              </div>
+
+              <div className="relative group transform hover:scale-105 transition-transform duration-700">
+                <svg width="240" height="320" viewBox="0 0 120 160" className="drop-shadow-2xl filter contrast-125">
+                  <defs>
+                     <mask id="finalMask">
+                       <path d={bottle.path} fill="white" />
+                     </mask>
+                     <filter id="waxGlow">
+                       <feGaussianBlur stdDeviation="2" result="blur"/>
+                       <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                     </filter>
+                  </defs>
+                  
+                  <g mask="url(#finalMask)">
+                     <rect width="100%" height="100%" fill="#1a1025" />
+                     {selection.map((item, index) => {
+                        const yPos = 130 - (index * 22); 
+                        const xOffset = (index % 2 === 0 ? 10 : -10);
+                        return (
+                          <g key={item.uniqueId} transform={`translate(${xOffset}, 0)`}>
+                            <foreignObject x="20" y={yPos} width="80" height="24">
+                              <div className="flex justify-center items-center w-full h-full">
+                                 {item.type === 'herb' 
+                                   ? <HerbIcon color={item.color} className="w-8 h-8 opacity-90" />
+                                   : <CrystalIcon color={item.color} className="w-8 h-8 opacity-90" />
+                                 }
+                              </div>
+                            </foreignObject>
+                          </g>
+                        );
+                     })}
+                  </g>
+
+                  <path d={bottle.path} fill="url(#glassShine)" stroke="rgba(255,255,255,0.5)" strokeWidth="2" />
+
+                  <g transform="translate(0, -5)">
+                     <path d="M40,25 Q60,45 80,25 L80,15 L40,15 Z" fill={wax?.shadow} />
+                     <path d="M40,15 L80,15 L80,25 C80,35 70,30 60,45 C50,30 40,35 40,25 Z" fill={wax?.color} filter="url(#waxGlow)" />
+                     <path d="M55,25 L65,25 L60,35 Z" fill="rgba(0,0,0,0.1)" />
+                  </g>
+                </svg>
+
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full pointer-events-none">
+                   {[...Array(6)].map((_,i) => (
+                     <div key={i} className="absolute bg-white rounded-full w-1 h-1 animate-float" 
+                          style={{
+                            left: `${Math.random()*100}%`, 
+                            top: `${Math.random()*100}%`, 
+                            animationDelay: `${Math.random()*2}s`,
+                            opacity: 0.6
+                          }} 
+                     />
+                   ))}
+                </div>
+              </div>
+
+              <div className="mt-8 bg-black/40 backdrop-blur border border-purple-500/30 rounded-xl p-4 max-w-sm w-full">
+                <div className="flex justify-center gap-3 mb-3 border-b border-white/10 pb-3">
+                  {selection.map(s => (
+                     <div key={s.uniqueId} className="w-6 h-6 rounded-full flex items-center justify-center bg-white/5" title={s.name}>
+                        <div className="w-3 h-3 rounded-full" style={{backgroundColor: s.color}}></div>
+                     </div>
+                  ))}
+                </div>
+                <div className="text-xs text-center text-purple-300/80 font-serif">
+                   封印了 <span className="text-white">{wax?.name.split(' ')[0]}</span> 的能量
+                </div>
+              </div>
+
+              <button onClick={resetGame} className="mt-8 text-purple-400 hover:text-white flex items-center gap-2 transition-colors">
+                <Wand2 size={16} /> 再次尝试
+              </button>
+            </div>
+          );
+
+          return (
+            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden relative selection:bg-purple-500/30">
+              
+              <div className="fixed inset-0 z-0">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,#2e1065,transparent)] opacity-50"></div>
+                <div className="absolute top-0 left-0 w-full h-full opacity-20" style={{backgroundImage: "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjMDIwMjAyIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz4KPC9zdmc+')"}}></div>
+              </div>
+
+              <div className="relative z-50 p-4 flex justify-between items-center max-w-6xl mx-auto w-full">
+                <div className="flex items-center gap-2 text-purple-300/50 hover:text-purple-300 transition-colors cursor-default">
+                   <Moon size={18} />
+                   <span className="text-xs font-serif tracking-widest hidden sm:inline">MYSTIC ALTAR v2.0</span>
+                </div>
+                <button onClick={toggleAudio} className="p-2 rounded-full hover:bg-white/10 text-purple-300 transition-all">
+                  {isMuted ? <VolumeX size={20} /> : <Music size={20} className="animate-pulse text-purple-400" />}
+                </button>
+              </div>
+
+              <main className="relative z-10 w-full h-[calc(100vh-80px)]">
+                {step === 0 && <IntroScreen />}
+                {step === 1 && <BottleScreen />}
+                {step === 2 && <IngredientsScreen />}
+                {step === 3 && <SealingScreen />}
+                {step === 4 && <ResultScreen />}
+              </main>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<WitchJarV2 />);
+    </script>
+</body>
+</html>
